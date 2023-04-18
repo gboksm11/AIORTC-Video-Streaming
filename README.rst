@@ -29,7 +29,13 @@ can connect to from your browser:
 You can then browse to the following page with your browser:
 
 http://127.0.0.1:8080 (if browsing on same machine)
-http://<your_ip_address>:8080
+
+To browse the page on a different machine, you will need to download `[ngrok](https://ngrok.com/download)`
+You should use ngrok to 1. make your server secure (served via Https) so that your client works, and 
+2. to serve your server over the network. Once you have ngrok downloaded, first run your server on your machine,
+then open the ngrok executable and run `ngrok http 8080` to create a tunnel serving your server at port 8080. 
+Open the generated link on another machine, you can now see the served html. Make sure you check "use stun servers"
+if you're accessing the files over the network.
 
 Once you click `Start` the browser will send the video from its
 webcam to the server.
