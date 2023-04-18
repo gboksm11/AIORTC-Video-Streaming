@@ -8,15 +8,21 @@ import uuid
 
 import cv2
 from aiohttp import web
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
+from aiohttp_cors import CorsConfig, ResourceOptions, setup
 from av import VideoFrame
 
+from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+
+import torch
+
+HAS_ESTABLISHED_DATA_CHANNEL = False
+client_data_channel = None
 ROOT = os.path.dirname(__file__)
+model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
 
 logger = logging.getLogger("pc")
 pcs = set()
-relay = MediaRelay()
 
 
 class VideoTransformTrack(MediaStreamTrack):
@@ -26,67 +32,29 @@ class VideoTransformTrack(MediaStreamTrack):
 
     kind = "video"
 
-    def __init__(self, track, transform):
+    def __init__(self, track):
         super().__init__()  # don't forget this!
         self.track = track
-        self.transform = transform
+        self.num = 0
 
     async def recv(self):
         frame = await self.track.recv()
 
-        if self.transform == "cartoon":
-            img = frame.to_ndarray(format="bgr24")
+        img = frame.to_ndarray(format="bgr24")
+        # cv2.imshow('Cam Feed', img)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            return
+        self.num = self.num + 1
+        if (self.num % 100 == 0):
+            results = model(img);
+            client_data_channel.send(f'I see {results}')
+            print(f'I SEE {results}')
 
-            # prepare color
-            img_color = cv2.pyrDown(cv2.pyrDown(img))
-            for _ in range(6):
-                img_color = cv2.bilateralFilter(img_color, 9, 9, 7)
-            img_color = cv2.pyrUp(cv2.pyrUp(img_color))
-
-            # prepare edges
-            img_edges = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            img_edges = cv2.adaptiveThreshold(
-                cv2.medianBlur(img_edges, 7),
-                255,
-                cv2.ADAPTIVE_THRESH_MEAN_C,
-                cv2.THRESH_BINARY,
-                9,
-                2,
-            )
-            img_edges = cv2.cvtColor(img_edges, cv2.COLOR_GRAY2RGB)
-
-            # combine color and edges
-            img = cv2.bitwise_and(img_color, img_edges)
-
-            # rebuild a VideoFrame, preserving timing information
-            new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-            new_frame.pts = frame.pts
-            new_frame.time_base = frame.time_base
-            return new_frame
-        elif self.transform == "edges":
-            # perform edge detection
-            img = frame.to_ndarray(format="bgr24")
-            img = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
-
-            # rebuild a VideoFrame, preserving timing information
-            new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-            new_frame.pts = frame.pts
-            new_frame.time_base = frame.time_base
-            return new_frame
-        elif self.transform == "rotate":
-            # rotate image
-            img = frame.to_ndarray(format="bgr24")
-            rows, cols, _ = img.shape
-            M = cv2.getRotationMatrix2D((cols / 2, rows / 2), frame.time * 45, 1)
-            img = cv2.warpAffine(img, M, (cols, rows))
-
-            # rebuild a VideoFrame, preserving timing information
-            new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-            new_frame.pts = frame.pts
-            new_frame.time_base = frame.time_base
-            return new_frame
-        else:
-            return frame
+        # # rebuild a VideoFrame, preserving timing information
+        # new_frame = VideoFrame.from_ndarray(img, format="bgr24")
+        # new_frame.pts = frame.pts
+        # new_frame.time_base = frame.time_base
+        return frame
 
 
 async def index(request):
@@ -112,24 +80,28 @@ async def offer(request):
 
     log_info("Created for %s", request.remote)
 
-    # prepare local media
-    player = MediaPlayer(os.path.join(ROOT, "demo-instruct.wav"))
-    if args.record_to:
-        recorder = MediaRecorder(args.record_to)
-    else:
-        recorder = MediaBlackhole()
+    # # prepare local media
+    # # player = MediaPlayer(os.path.join(ROOT, "demo-instruct.wav"))
+    # if args.write_audio:
+    #     x = 2
+    #     # recorder = MediaRecorder(args.write_audio)
+    # else:
+    recorder = MediaBlackhole()
 
     @pc.on("datachannel")
     def on_datachannel(channel):
         @channel.on("message")
         def on_message(message):
             if isinstance(message, str) and message.startswith("ping"):
-                channel.send("pong" + message[4:])
+                global HAS_ESTABLISHED_DATA_CHANNEL
+                global client_data_channel
+                HAS_ESTABLISHED_DATA_CHANNEL = True
+                client_data_channel = channel
 
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        log_info("Connection state is %s", pc.connectionState)
-        if pc.connectionState == "failed":
+    @pc.on("iceconnectionstatechange")
+    async def on_iceconnectionstatechange():
+        log_info("ICE connection state is %s", pc.iceConnectionState)
+        if pc.iceConnectionState == "failed":
             await pc.close()
             pcs.discard(pc)
 
@@ -137,17 +109,16 @@ async def offer(request):
     def on_track(track):
         log_info("Track %s received", track.kind)
 
-        if track.kind == "audio":
-            pc.addTrack(player.audio)
-            recorder.addTrack(track)
-        elif track.kind == "video":
-            pc.addTrack(
-                VideoTransformTrack(
-                    relay.subscribe(track), transform=params["video_transform"]
-                )
+        # if track.kind == "audio":
+        #     # pc.addTrack(player.audio)
+        #     # recorder.addTrack(track)
+        #     x = 4
+        # elif 
+        if track.kind == "video":
+            local_video = VideoTransformTrack(
+                track
             )
-            if args.record_to:
-                recorder.addTrack(relay.subscribe(track))
+            pc.addTrack(local_video)
 
         @track.on("ended")
         async def on_ended():
@@ -189,8 +160,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port", type=int, default=8080, help="Port for HTTP server (default: 8080)"
     )
-    parser.add_argument("--record-to", help="Write received media to a file."),
     parser.add_argument("--verbose", "-v", action="count")
+    parser.add_argument("--write-audio", help="Write received audio to a file")
     args = parser.parse_args()
 
     if args.verbose:
@@ -205,10 +176,24 @@ if __name__ == "__main__":
         ssl_context = None
 
     app = web.Application()
+
+
+    cors = setup(app, defaults={
+    "*": ResourceOptions(
+            allow_credentials=True,
+            expose_headers="*",
+            allow_headers="*"
+        )
+    })
+
     app.on_shutdown.append(on_shutdown)
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
     app.router.add_post("/offer", offer)
+
+    for route in list(app.router.routes()):
+        cors.add(route)
+
     web.run_app(
         app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
     )

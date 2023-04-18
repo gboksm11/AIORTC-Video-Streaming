@@ -16,12 +16,36 @@ function createPeerConnection() {
     };
 
     if (document.getElementById('use-stun').checked) {
-        config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
+        config.iceServers = [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+            { urls: "stun:stun.ekiga.net" },
+            { urls: "stun:stun.ideasip.com" },
+            { urls: "stun:stun.schlund.de" },
+            { urls: "stun:stun.voiparound.com" },
+            { urls: "stun:stun.voipbuster.com" },
+            { urls: "stun:stun.voipstunt.com" },
+            { urls: "stun:stun.voxgratia.org" }
+          ]
     }
 
     pc = new RTCPeerConnection(config);
 
-    // register some listeners to help debugging
+    pc.onicecandidate = (e) => {
+        console.log(`ICE candidate: ${e.candidate}`);
+        if (e.candidate != null) {
+            console.log(e.candidate);
+        } else {
+            console.log("ICE gathering complete");
+        }
+    }
+
+    pc.on
+
+    //register some listeners to help debugging
     pc.addEventListener('icegatheringstatechange', function() {
         iceGatheringLog.textContent += ' -> ' + pc.iceGatheringState;
     }, false);
@@ -49,6 +73,7 @@ function createPeerConnection() {
 }
 
 function negotiate() {
+    console.log("creating offer...");
     return pc.createOffer().then(function(offer) {
         return pc.setLocalDescription(offer);
     }).then(function() {
@@ -70,10 +95,10 @@ function negotiate() {
         var offer = pc.localDescription;
         var codec;
 
-        codec = document.getElementById('audio-codec').value;
-        if (codec !== 'default') {
-            offer.sdp = sdpFilterCodec('audio', codec, offer.sdp);
-        }
+        // codec = document.getElementById('audio-codec').value;
+        // if (codec !== 'default') {
+        //     offer.sdp = sdpFilterCodec('audio', codec, offer.sdp);
+        // }
 
         codec = document.getElementById('video-codec').value;
         if (codec !== 'default') {
@@ -81,11 +106,11 @@ function negotiate() {
         }
 
         document.getElementById('offer-sdp').textContent = offer.sdp;
+        console.log('fetching...');
         return fetch('/offer', {
             body: JSON.stringify({
                 sdp: offer.sdp,
-                type: offer.type,
-                video_transform: document.getElementById('video-transform').value
+                type: offer.type
             }),
             headers: {
                 'Content-Type': 'application/json'
@@ -128,24 +153,19 @@ function start() {
         };
         dc.onopen = function() {
             dataChannelLog.textContent += '- open\n';
-            dcInterval = setInterval(function() {
-                var message = 'ping ' + current_stamp();
-                dataChannelLog.textContent += '> ' + message + '\n';
-                dc.send(message);
-            }, 1000);
+            var message = 'ping ' + current_stamp();
+            dataChannelLog.textContent += '> ' + message + '\n';
+            dc.send(message);
         };
         dc.onmessage = function(evt) {
             dataChannelLog.textContent += '< ' + evt.data + '\n';
-
-            if (evt.data.substring(0, 4) === 'pong') {
-                var elapsed_ms = current_stamp() - parseInt(evt.data.substring(5), 10);
-                dataChannelLog.textContent += ' RTT ' + elapsed_ms + ' ms\n';
-            }
+            const elem = document.getElementById("data-channel");
+            elem.scrollTop = elem.scrollHeight;
         };
     }
 
     var constraints = {
-        audio: document.getElementById('use-audio').checked,
+        audio: false,
         video: false
     };
 
@@ -174,6 +194,7 @@ function start() {
         }, function(err) {
             alert('Could not acquire media: ' + err);
         });
+        console.log("could not get media");
     } else {
         negotiate();
     }
@@ -207,7 +228,7 @@ function stop() {
     setTimeout(function() {
         pc.close();
     }, 500);
-}
+} 
 
 function sdpFilterCodec(kind, codec, realSdp) {
     var allowed = []

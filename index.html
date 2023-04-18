@@ -28,7 +28,7 @@
 </head>
 <body>
 
-<h2>Options</h2>
+<h2>Optionss</h2>
 <div class="option">
     <input id="use-datachannel" checked="checked" type="checkbox"/>
     <label for="use-datachannel">Use datachannel</label>
@@ -36,16 +36,6 @@
         <option value='{"ordered": true}'>Ordered, reliable</option>
         <option value='{"ordered": false, "maxRetransmits": 0}'>Unordered, no retransmissions</option>
         <option value='{"ordered": false, "maxPacketLifetime": 500}'>Unordered, 500ms lifetime</option>
-    </select>
-</div>
-<div class="option">
-    <input id="use-audio" checked="checked" type="checkbox"/>
-    <label for="use-audio">Use audio</label>
-    <select id="audio-codec">
-        <option value="default" selected>Default codecs</option>
-        <option value="opus/48000/2">Opus</option>
-        <option value="PCMU/8000">PCMU</option>
-        <option value="PCMA/8000">PCMA</option>
     </select>
 </div>
 <div class="option">
@@ -57,12 +47,6 @@
         <option value="640x480">640x480</option>
         <option value="960x540">960x540</option>
         <option value="1280x720">1280x720</option>
-    </select>
-    <select id="video-transform">
-        <option value="none" selected>No transform</option>
-        <option value="edges">Edge detection</option>
-        <option value="cartoon">Cartoon effect</option>
-        <option value="rotate">Rotate</option>
     </select>
     <select id="video-codec">
         <option value="default" selected>Default codecs</option>
@@ -90,7 +74,7 @@
 </p>
 
 <div id="media" style="display: none">
-    <h2>Media</h2>
+    <h2>Medias</h2>
 
     <audio id="audio" autoplay="true"></audio>
     <video id="video" autoplay="true" playsinline="true"></video>
