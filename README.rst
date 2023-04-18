@@ -30,7 +30,7 @@ You can then browse to the following page with your browser:
 
 http://127.0.0.1:8080 (if browsing on same machine)
 
-To browse the page on a different machine, you will need to download `[ngrok](https://ngrok.com/download)`
+To browse the page on a different machine, you will need to download `ngrok(https://ngrok.com/download)`
 You should use ngrok to 1. make your server secure (served via Https) so that your client works, and 
 2. to serve your server over the network. Once you have ngrok downloaded, first run your server on your machine,
 then open the ngrok executable and run `ngrok http 8080` to create a tunnel serving your server at port 8080. 
