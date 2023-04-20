@@ -19,7 +19,7 @@ import torch
 HAS_ESTABLISHED_DATA_CHANNEL = False
 client_data_channel = None
 ROOT = os.path.dirname(__file__)
-model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+model = torch.hub.load('ultralytics/yolov5', 'yolov5m', pretrained=True)
 
 logger = logging.getLogger("pc")
 pcs = set()
