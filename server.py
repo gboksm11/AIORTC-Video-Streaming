@@ -5,6 +5,7 @@ import logging
 import os
 import ssl
 import uuid
+import time
 
 import cv2
 from aiohttp import web
@@ -18,6 +19,7 @@ import torch
 
 HAS_ESTABLISHED_DATA_CHANNEL = False
 client_data_channel = None
+client_video_track = None
 ROOT = os.path.dirname(__file__)
 model = torch.hub.load('ultralytics/yolov5', 'yolov5m', pretrained=True)
 
@@ -38,32 +40,35 @@ class VideoTransformTrack(MediaStreamTrack):
         self.num = 0
 
     async def recv(self):
+        #print("hi")
         frame = await self.track.recv()
 
         img = frame.to_ndarray(format="bgr24")
         # cv2.imshow('Cam Feed', img)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            return
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #     return
         self.num = self.num + 1
         if (self.num % 100 == 0):
             results = model(img);
             client_data_channel.send(f'I see {results}')
             print(f'I SEE {results}')
 
-        # # rebuild a VideoFrame, preserving timing information
-        # new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-        # new_frame.pts = frame.pts
-        # new_frame.time_base = frame.time_base
         return frame
-
 
 async def index(request):
     content = open(os.path.join(ROOT, "index.html"), "r").read()
     return web.Response(content_type="text/html", text=content)
 
+async def viewer(request):
+    content = open(os.path.join(ROOT, "consumer.html"), "r").read()
+    return web.Response(content_type="text/html", text=content)
 
 async def javascript(request):
     content = open(os.path.join(ROOT, "client.js"), "r").read()
+    return web.Response(content_type="application/javascript", text=content)
+
+async def viewer_js(request):
+    content = open(os.path.join(ROOT, "consumer.js"), "r").read()
     return web.Response(content_type="application/javascript", text=content)
 
 
@@ -106,7 +111,7 @@ async def offer(request):
             pcs.discard(pc)
 
     @pc.on("track")
-    def on_track(track):
+    async def on_track(track):
         log_info("Track %s received", track.kind)
 
         # if track.kind == "audio":
@@ -115,10 +120,16 @@ async def offer(request):
         #     x = 4
         # elif 
         if track.kind == "video":
+            print("hi")
             local_video = VideoTransformTrack(
                 track
             )
             pc.addTrack(local_video)
+            global client_video_track
+            client_video_track = track
+            #await processFrames(track=track)
+
+
 
         @track.on("ended")
         async def on_ended():
@@ -128,6 +139,32 @@ async def offer(request):
     # handle offer
     await pc.setRemoteDescription(offer)
     await recorder.start()
+
+    # send answer
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+
+    print('done offer')
+    return web.Response(
+        content_type="application/json",
+        text=json.dumps(
+            {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+        ),
+    )
+
+async def consumer(request):
+    params = await request.json()
+    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+
+    pc = RTCPeerConnection()
+    pc_id = "PeerConnection(%s)" % uuid.uuid4()
+    pcs.add(pc)
+
+    # handle offer
+    await pc.setRemoteDescription(offer)
+
+    # add existing client stream to connection tracks
+    pc.addTrack(client_video_track)
 
     # send answer
     answer = await pc.createAnswer()
@@ -187,9 +224,16 @@ if __name__ == "__main__":
     })
 
     app.on_shutdown.append(on_shutdown)
+
+    # serve static html/js files
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
+    app.router.add_get("/viewer", viewer)
+    app.router.add_get("/consumer.js", viewer_js)
+
+    # streaming endpoints
     app.router.add_post("/offer", offer)
+    app.router.add_post("/consumer", consumer)
 
     for route in list(app.router.routes()):
         cors.add(route)

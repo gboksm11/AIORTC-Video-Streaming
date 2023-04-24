@@ -118,6 +118,7 @@ function negotiate() {
             method: 'POST'
         });
     }).then(function(response) {
+        console.log("done offer");
         return response.json();
     }).then(function(answer) {
         document.getElementById('answer-sdp').textContent = answer.sdp;
