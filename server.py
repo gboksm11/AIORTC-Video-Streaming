@@ -45,8 +45,8 @@ class VideoTransformTrack(MediaStreamTrack):
 
         img = frame.to_ndarray(format="bgr24")
         # cv2.imshow('Cam Feed', img)
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-        #     return
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            return
         self.num = self.num + 1
         if (self.num % 100 == 0):
             results = model(img);
@@ -111,7 +111,7 @@ async def offer(request):
             pcs.discard(pc)
 
     @pc.on("track")
-    async def on_track(track):
+    def on_track(track):
         log_info("Track %s received", track.kind)
 
         # if track.kind == "audio":
